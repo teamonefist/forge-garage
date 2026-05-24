@@ -1,0 +1,107 @@
+#!/usr/bin/env bash
+set -euo pipefail
+
+GARAGE_HOME="${HOME}/.forge-garage"
+VENV="${GARAGE_HOME}/venv"
+RUN_DIR="${GARAGE_HOME}/run"
+
+if [[ ! -d "${GARAGE_HOME}" ]]; then
+    echo "Error: ${GARAGE_HOME} not found. Run install.sh first."
+    exit 1
+fi
+
+mkdir -p "${RUN_DIR}"
+
+start_backends() {
+    local orch_port war_port orch_model war_model
+    orch_port=$(python3 -c "import yaml; print(yaml.safe_load(open('${GARAGE_HOME}/config.yml'))['orchestrator']['port'])" 2>/dev/null || echo 8081)
+    war_port=$(python3 -c "import yaml; print(yaml.safe_load(open('${GARAGE_HOME}/config.yml'))['warrior']['port'])" 2>/dev/null || echo 8082)
+    orch_model=$(python3 -c "import yaml; print(yaml.safe_load(open('${GARAGE_HOME}/config.yml'))['orchestrator']['model_path'])" 2>/dev/null)
+    war_model=$(python3 -c "import yaml; print(yaml.safe_load(open('${GARAGE_HOME}/config.yml'))['warrior']['model_path'])" 2>/dev/null)
+
+    # Expand ~ in paths
+    orch_model="${orch_model/#\~/$HOME}"
+    war_model="${war_model/#\~/$HOME}"
+
+    # Check if Orchestrator is already running
+    if ! curl -s "http://127.0.0.1:${orch_port}/health" >/dev/null 2>&1; then
+        echo "Starting Orchestrator on port ${orch_port}..."
+        ORCH_LORA=""
+        if [[ -f "${GARAGE_HOME}/models/forge-orchestrator-lora-f16.gguf" ]]; then
+            ORCH_LORA="--lora ${GARAGE_HOME}/models/forge-orchestrator-lora-f16.gguf"
+        fi
+        nohup llama-server \
+            --model "${orch_model}" \
+            ${ORCH_LORA} \
+            --port "${orch_port}" \
+            --host 127.0.0.1 \
+            --ctx-size 32768 \
+            --n-gpu-layers -1 \
+            --threads 8 \
+            --parallel 1 \
+            --cont-batching \
+            --flash-attn \
+            --mlock \
+            > "${GARAGE_HOME}/logs/orchestrator.log" 2>&1 &
+        echo $! > "${RUN_DIR}/orchestrator.pid"
+    else
+        echo "Orchestrator already running on port ${orch_port}"
+    fi
+
+    # Check if Warrior is already running
+    if ! curl -s "http://127.0.0.1:${war_port}/health" >/dev/null 2>&1; then
+        echo "Starting Warrior on port ${war_port}..."
+        WAR_LORA=""
+        if [[ -f "${GARAGE_HOME}/models/forge-warrior-lora-f16.gguf" ]]; then
+            WAR_LORA="--lora ${GARAGE_HOME}/models/forge-warrior-lora-f16.gguf"
+        fi
+        nohup llama-server \
+            --model "${war_model}" \
+            ${WAR_LORA} \
+            --port "${war_port}" \
+            --host 127.0.0.1 \
+            --ctx-size 32768 \
+            --n-gpu-layers -1 \
+            --threads 8 \
+            --parallel 1 \
+            --cont-batching \
+            --flash-attn \
+            --mlock \
+            > "${GARAGE_HOME}/logs/warrior.log" 2>&1 &
+        echo $! > "${RUN_DIR}/warrior.pid"
+    else
+        echo "Warrior already running on port ${war_port}"
+    fi
+
+    # Wait for health checks
+    echo "Waiting for models to load..."
+    local retries=0
+    while [[ $retries -lt 120 ]]; do
+        orch_ok=$(curl -s -o /dev/null -w "%{http_code}" "http://127.0.0.1:${orch_port}/health" 2>/dev/null || echo "000")
+        war_ok=$(curl -s -o /dev/null -w "%{http_code}" "http://127.0.0.1:${war_port}/health" 2>/dev/null || echo "000")
+        if [[ "${orch_ok}" == "200" && "${war_ok}" == "200" ]]; then
+            echo "Both models loaded successfully."
+            return 0
+        fi
+        sleep 2
+        retries=$((retries + 1))
+    done
+    echo "Warning: Models did not become healthy within 240s. Launching TUI anyway."
+}
+
+# Parse args
+TUI_ONLY=false
+for arg in "$@"; do
+    case "$arg" in
+        --tui-only) TUI_ONLY=true ;;
+    esac
+done
+
+if [[ "${TUI_ONLY}" == "false" ]]; then
+    start_backends
+fi
+
+# Activate venv and run TUI
+source "${VENV}/bin/activate"
+export PYTHONPATH="${GARAGE_HOME}/lib"
+python3 -m lib.app

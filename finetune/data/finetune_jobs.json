@@ -1,0 +1,14 @@
+{
+  "warrior": {
+    "job_id": "ft-37b78c3a-a52d",
+    "status": "pending",
+    "file_id": "file-54fcdbef-4e97-4734-9b5d-bc8722aaa0ed",
+    "base_model": "deepseek-ai/DeepSeek-R1-Distill-Llama-70B"
+  },
+  "orchestrator": {
+    "job_id": "ft-00ef7434-ea97",
+    "status": "pending",
+    "file_id": "file-54d45c51-af80-483f-86c1-39d9864e0ad9",
+    "base_model": "Qwen/Qwen2.5-72B-Instruct"
+  }
+}

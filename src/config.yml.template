@@ -1,0 +1,56 @@
+# Forge Garage Configuration
+language: uk
+
+orchestrator:
+  model_path: __ORCH_MODEL_PATH__
+  port: 8081
+  context_length: 32768
+  gpu_layers: -1
+  threads: 8
+  max_tokens: 4096
+
+warrior:
+  model_path: __WAR_MODEL_PATH__
+  port: 8082
+  context_length: 32768
+  gpu_layers: -1
+  threads: 8
+  max_tokens: 4096
+
+orchestrator_tools:
+  core: [bash, sh, grep, awk, sed, sort, uniq, wc, head, tail, cat, ls, find, cut, tr, xargs, jq, base64, file, diff, echo, mkdir, cp, mv, touch, chmod, stat, du, df]
+  langs: [python3, python, git, go, gcc, cargo, rustc, node, npm]
+  data: [sqlite3, duckdb, csvlook, csvcut, csvstat]
+  net_read: [ping, dig, host, curl, wget, whois, traceroute, nslookup]
+  docs: [pandoc, mdcat, glow, less, more]
+
+warrior_tools:
+  core: [bash, sh, grep, awk, sed, sort, uniq, wc, head, tail, cat, ls, find, cut, tr, xargs, jq, base64, openssl, file, hexdump, xxd, strings, echo, mkdir, cp, mv, touch, chmod]
+  langs: [python3, python, go, gcc, cargo, rustc, git, node, npm]
+  dns: [dig, host, whois, dnsrecon, dnsenum, nslookup, massdns]
+  portscan: [nmap, rustscan, naabu, masscan]
+  subdomain: [subfinder, amass, findomain, assetfinder, katana, hakrawler]
+  webrecon: [whatweb, wafw00f, httpx, nuclei, nikto]
+  webfuzz: [feroxbuster, gobuster, ffuf, wfuzz, arjun, dirsearch]
+  http: [curl, wget]
+  sqli: [sqlmap]
+  network: [ping, traceroute, nc, netcat, ncat, socat, ss, ip, tcpdump, tshark, ssh]
+  windows: [smbclient, rpcclient, enum4linux, nxc, crackmapexec, evil-winrm]
+  impacket: [impacket-secretsdump, impacket-GetUserSPNs, impacket-GetNPUsers, impacket-psexec, impacket-smbexec, impacket-wmiexec]
+  crack: [hydra, medusa, john, hashcat]
+  binary: [radare2, r2, binwalk, objdump, readelf, nm, strings]
+  crypto: [openssl, gpg, age]
+
+banned_patterns:
+  - 'rm\s+-rf\s+/'
+  - 'mkfs\.'
+  - 'dd\s+if=.*of=/dev/'
+  - '\bshutdown\b'
+  - '\breboot\b'
+  - '\bhalt\b'
+  - '\bpoweroff\b'
+
+ui:
+  history_max: 200
+  output_truncate_chars: 50000
+  exec_default_timeout: 300

@@ -1,0 +1,67 @@
+#!/usr/bin/env bash
+set -euo pipefail
+
+GARAGE_HOME="${HOME}/.forge-garage"
+RUN_DIR="${GARAGE_HOME}/run"
+
+if [[ ! -d "${GARAGE_HOME}" ]]; then
+    echo "Forge Garage is not installed."
+    exit 1
+fi
+
+echo "=== Forge Garage Status ==="
+echo ""
+
+check_backend() {
+    local name="$1"
+    local port="$2"
+    local pidfile="${RUN_DIR}/${name}.pid"
+    local pid_status="no PID file"
+
+    if [[ -f "${pidfile}" ]]; then
+        local pid
+        pid=$(cat "${pidfile}")
+        if kill -0 "${pid}" 2>/dev/null; then
+            pid_status="PID ${pid} (running)"
+        else
+            pid_status="PID ${pid} (dead)"
+        fi
+    fi
+
+    local health
+    health=$(curl -s -o /dev/null -w "%{http_code}" "http://127.0.0.1:${port}/health" 2>/dev/null || echo "000")
+
+    local status_icon="[OFFLINE]"
+    if [[ "${health}" == "200" ]]; then
+        status_icon="[ONLINE]"
+    fi
+
+    printf "  %-14s %s  port=%s  %s\n" "${name}" "${status_icon}" "${port}" "${pid_status}"
+}
+
+orch_port=$(python3 -c "import yaml; print(yaml.safe_load(open('${GARAGE_HOME}/config.yml'))['orchestrator']['port'])" 2>/dev/null || echo 8081)
+war_port=$(python3 -c "import yaml; print(yaml.safe_load(open('${GARAGE_HOME}/config.yml'))['warrior']['port'])" 2>/dev/null || echo 8082)
+
+check_backend "Orchestrator" "${orch_port}"
+check_backend "Warrior" "${war_port}"
+
+echo ""
+
+# GPU info
+if command -v nvidia-smi &>/dev/null; then
+    echo "GPU:"
+    nvidia-smi --query-gpu=name,memory.used,memory.total,utilization.gpu,temperature.gpu --format=csv,noheader 2>/dev/null | while read -r line; do
+        echo "  ${line}"
+    done
+else
+    echo "GPU: nvidia-smi not found"
+fi
+
+echo ""
+
+# Session info
+if [[ -f "${GARAGE_HOME}/garage.db" ]]; then
+    session_count=$(sqlite3 "${GARAGE_HOME}/garage.db" "SELECT COUNT(*) FROM garage_sessions;" 2>/dev/null || echo "?")
+    finding_count=$(sqlite3 "${GARAGE_HOME}/garage.db" "SELECT COUNT(*) FROM garage_findings;" 2>/dev/null || echo "?")
+    echo "Database: ${session_count} sessions, ${finding_count} findings"
+fi
