@@ -286,7 +286,6 @@ explain_ua "База даних зберігається локально у ${G
 explain_en "Database is stored locally at ${GARAGE_HOME}/garage.db"
 echo ""
 
-source "${GARAGE_HOME}/venv/bin/activate"
 python3 -c "
 import sys
 sys.path.insert(0, '${SRC_DIR}')
@@ -295,7 +294,6 @@ from pathlib import Path
 db.init(Path('${GARAGE_HOME}'))
 print('  Database initialized with schema.')
 "
-deactivate
 ok "garage.db created"
 
 wait_enter
