@@ -286,14 +286,41 @@ explain_ua "База даних зберігається локально у ${G
 explain_en "Database is stored locally at ${GARAGE_HOME}/garage.db"
 echo ""
 
-python3 -c "
-import sys
-sys.path.insert(0, '${SRC_DIR}')
-from lib import db
+python3 << 'PYEOF'
+import sqlite3
 from pathlib import Path
-db.init(Path('${GARAGE_HOME}'))
-print('  Database initialized with schema.')
-"
+
+db_path = Path.home() / ".forge-garage" / "garage.db"
+conn = sqlite3.connect(str(db_path))
+conn.executescript("""
+CREATE TABLE IF NOT EXISTS garage_chat (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    session_id TEXT NOT NULL,
+    role TEXT NOT NULL,
+    content TEXT NOT NULL,
+    timestamp DATETIME DEFAULT CURRENT_TIMESTAMP
+);
+CREATE TABLE IF NOT EXISTS garage_session (
+    id TEXT PRIMARY KEY,
+    name TEXT,
+    target TEXT,
+    status TEXT DEFAULT 'active',
+    created DATETIME DEFAULT CURRENT_TIMESTAMP,
+    updated DATETIME DEFAULT CURRENT_TIMESTAMP
+);
+CREATE TABLE IF NOT EXISTS garage_finding (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    session_id TEXT NOT NULL,
+    severity TEXT,
+    title TEXT NOT NULL,
+    detail TEXT,
+    evidence TEXT,
+    timestamp DATETIME DEFAULT CURRENT_TIMESTAMP
+);
+""")
+conn.close()
+print("  Database initialized with schema.")
+PYEOF
 ok "garage.db created"
 
 wait_enter
