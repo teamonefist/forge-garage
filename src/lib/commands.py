@@ -1,3 +1,4 @@
+import threading
 from pathlib import Path
 from . import i18n, db
 from .garage_core import check_health
@@ -7,6 +8,8 @@ class CommandDispatcher:
     def __init__(self, config: dict, garage_home: Path):
         self.config = config
         self.garage_home = garage_home
+        self._active_mission = None
+        self._mission_thread = None
 
     def dispatch(self, raw_input: str, session_id: str) -> tuple[str, bool]:
         if not raw_input.startswith("/"):
@@ -91,6 +94,73 @@ class CommandDispatcher:
             marker = " <-" if row["session_id"] == session_id else ""
             lines.append(f"  {row['session_id']} | {row['started_at']} | {row['message_count']} msgs{marker}")
         return "\n".join(lines)
+
+    def cmd_mission(self, args: str, session_id: str) -> str:
+        if not args:
+            return i18n.t("mission_usage") if "mission_usage" in i18n._strings else (
+                "Usage: /mission <objective>\nStarts an autonomous mission that loops until the objective is met."
+            )
+
+        if self._active_mission and self._active_mission.status == "running":
+            return "A mission is already running. Use /mission-stop first."
+
+        from .mission_controller import Mission, MissionConfig, run_mission
+        from .warrior_harness import build_warrior
+        from .orchestrator_harness import build_orchestrator
+
+        orch_port = self.config.get("orchestrator", {}).get("port", 8081)
+        orch_tools = set(self.config.get("orchestrator", {}).get("tools", []))
+        persona = build_orchestrator(orch_port, orch_tools)
+
+        mc = MissionConfig(
+            max_iterations=20,
+            reasoning_persona=persona,
+        )
+
+        self._active_mission = Mission(
+            objective=args.strip(),
+            session_id=session_id,
+            config=mc,
+        )
+
+        def _run():
+            result = run_mission(self._active_mission)
+            self._mission_result = result
+
+        self._mission_thread = threading.Thread(target=_run, daemon=True)
+        self._mission_thread.start()
+        return f"Mission started: {args.strip()}\nUse /mission-status to check progress, /mission-stop to halt."
+
+    def cmd_mission_status(self, args: str, session_id: str) -> str:
+        if not self._active_mission:
+            conn = db.get_connection()
+            rows = conn.execute(
+                "SELECT id, objective, status, iterations, started_at FROM garage_missions "
+                "ORDER BY started_at DESC LIMIT 5"
+            ).fetchall()
+            conn.close()
+            if not rows:
+                return "No missions found."
+            lines = ["Recent missions:"]
+            for row in rows:
+                lines.append(f"  #{row['id']} [{row['status']}] {row['objective'][:60]} ({row['iterations']} iters)")
+            return "\n".join(lines)
+
+        m = self._active_mission
+        ctx = m.context
+        return (
+            f"Mission: {m.objective}\n"
+            f"Status: {m.status}\n"
+            f"Iteration: {ctx.iteration}\n"
+            f"Findings: {len(ctx.findings)}\n"
+            f"Last tool: {ctx.decisions[-1].tool if ctx.decisions else 'none'}"
+        )
+
+    def cmd_mission_stop(self, args: str, session_id: str) -> str:
+        if not self._active_mission or self._active_mission.status != "running":
+            return "No active mission to stop."
+        self._active_mission.request_stop()
+        return "Stop requested. Mission will halt after current iteration."
 
     def cmd_quit(self, args: str, session_id: str) -> str:
         return "__QUIT__"

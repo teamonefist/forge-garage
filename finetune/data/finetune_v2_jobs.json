@@ -1,0 +1,30 @@
+{
+  "version": "v2",
+  "warrior": {
+    "job_id": "ft-c76a0a46-1091",
+    "file_id": "file-88760ce0-a0e6-465c-9241-a237452a8de0",
+    "base_model": "deepseek-ai/DeepSeek-R1-Distill-Llama-70B",
+    "suffix": "forge-warrior-v2",
+    "samples": 6560,
+    "enhancements": [
+      "cve_exploitation",
+      "cve_database",
+      "igc_calculator",
+      "advanced_chains",
+      "bbot_workflows"
+    ]
+  },
+  "orchestrator": {
+    "job_id": "ft-2e369872-d2fa",
+    "file_id": "file-c18aa177-653b-4252-a4c1-6954e4c87525",
+    "base_model": "Qwen/Qwen2.5-72B-Instruct",
+    "suffix": "forge-orchestrator-v2",
+    "samples": 5970,
+    "enhancements": [
+      "task_dispatch",
+      "cve_research",
+      "scope_management",
+      "igc_calculator"
+    ]
+  }
+}

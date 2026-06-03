@@ -74,8 +74,18 @@ def execute_command(cmd: str, timeout: int = DEFAULT_TIMEOUT) -> tuple[str, int]
         return f"Error: {e}", -1
 
 
-def query_model(persona: PersonaConfig, messages: list[dict], system_prompt: str) -> str:
-    url = f"http://127.0.0.1:{persona.port}/v1/chat/completions"
+def check_health(port: int) -> bool:
+    try:
+        resp = requests.get(f"http://127.0.0.1:{port}/health", timeout=5)
+        return resp.status_code == 200
+    except Exception:
+        return False
+
+
+def query_model(persona: PersonaConfig, messages: list[dict], system_prompt: str,
+                backend_url: str | None = None, json_mode: bool = False) -> str:
+    base = backend_url or f"http://127.0.0.1:{persona.port}"
+    url = f"{base}/v1/chat/completions"
     body = {
         "messages": [{"role": "system", "content": system_prompt}] + messages,
         "max_tokens": persona.max_tokens,
@@ -83,6 +93,8 @@ def query_model(persona: PersonaConfig, messages: list[dict], system_prompt: str
         "top_p": 0.9,
         "stop": ["</s>", "<|im_end|>", "<|end|>"],
     }
+    if json_mode:
+        body["response_format"] = {"type": "json_object"}
     try:
         resp = requests.post(url, json=body, timeout=600)
         resp.raise_for_status()
@@ -191,11 +203,3 @@ def agent_loop(
         conn.close()
 
     return full_response
-
-
-def check_health(port: int) -> bool:
-    try:
-        resp = requests.get(f"http://127.0.0.1:{port}/health", timeout=3)
-        return resp.status_code == 200
-    except Exception:
-        return False

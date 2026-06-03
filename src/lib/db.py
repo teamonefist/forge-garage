@@ -46,9 +46,33 @@ CREATE TABLE IF NOT EXISTS garage_sessions (
     message_count INTEGER DEFAULT 0
 );
 
+CREATE TABLE IF NOT EXISTS garage_missions (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    session_id TEXT NOT NULL,
+    objective TEXT NOT NULL,
+    status TEXT DEFAULT 'pending',
+    iterations INTEGER DEFAULT 0,
+    context_snapshot TEXT,
+    started_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+    completed_at TIMESTAMP
+);
+
+CREATE TABLE IF NOT EXISTS garage_mission_steps (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    mission_id TEXT NOT NULL,
+    iteration INTEGER NOT NULL,
+    thought TEXT,
+    action_json TEXT,
+    result_summary TEXT,
+    status TEXT,
+    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+);
+
 CREATE INDEX IF NOT EXISTS idx_chat_session ON garage_chat(session_id);
 CREATE INDEX IF NOT EXISTS idx_chat_pending ON garage_chat(to_persona, status);
 CREATE INDEX IF NOT EXISTS idx_findings_session ON garage_findings(session_id);
+CREATE INDEX IF NOT EXISTS idx_missions_session ON garage_missions(session_id);
+CREATE INDEX IF NOT EXISTS idx_mission_steps ON garage_mission_steps(mission_id);
 """
 
 
