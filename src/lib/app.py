@@ -13,6 +13,7 @@ from .orchestrator_harness import build_orchestrator
 from .warrior_harness import build_warrior
 from .commands import CommandDispatcher
 from .gpu_monitor import format_status, get_gpu_stats
+from .model_swapper import ModelSwapper
 
 CYAN = "\033[1;36m"
 RED = "\033[1;31m"
@@ -41,6 +42,7 @@ class GarageApp:
         self.orchestrator = self._build_orchestrator()
         self.warrior = self._build_warrior()
         self.commands = CommandDispatcher(self.config, garage_home)
+        self.swapper = ModelSwapper(self.config)
 
         self._init_session()
 
@@ -82,11 +84,15 @@ class GarageApp:
         conn.commit()
         conn.close()
 
+    def _swap_status(self, msg: str):
+        print(f"\n{YELLOW}  [SWAP] {msg}{RESET}")
+
     def _status_line(self) -> str:
         now = datetime.now().strftime("%H:%M:%S")
         lang_indicator = i18n.t("language_indicator")
         gpu = format_status(get_gpu_stats())
-        persona_state = f"{self.active_persona}: {i18n.t('status_' + self.harness_state)}"
+        loaded = self.swapper.current or "none"
+        persona_state = f"Active: {self.active_persona} | Loaded: {loaded}"
 
         conn = db.get_connection()
         row = conn.execute(
@@ -103,14 +109,22 @@ class GarageApp:
         print(f"{BOLD}  {i18n.t('welcome')}{RESET}")
         print(f"{BOLD}{'=' * 60}{RESET}")
         print(f"{GRAY}  {i18n.t('session_started', id=self.session_id)}{RESET}")
+        print(f"{GRAY}  Single-GPU mode: models swap automatically{RESET}")
 
-        orch_ok = check_health(self.config.get("orchestrator", {}).get("port", 8081))
-        war_ok = check_health(self.config.get("warrior", {}).get("port", 8082))
-        orch_sym = "online" if orch_ok else "offline"
-        war_sym = "online" if war_ok else "offline"
-        print(f"{GRAY}  Orchestrator [{orch_sym}] | Warrior [{war_sym}]{RESET}")
+        loaded = self.swapper.current
+        if loaded:
+            print(f"{GRAY}  Currently loaded: {loaded}{RESET}")
+        else:
+            print(f"{GRAY}  No model loaded — will load on first query{RESET}")
+
         print(f"{GRAY}  {i18n.t('help_hint')}{RESET}")
         print(f"{BOLD}{'─' * 60}{RESET}\n")
+
+    def _ensure_model(self, persona_name: str) -> bool:
+        if persona_name == "Orchestrator":
+            return self.swapper.ensure_orchestrator(on_status=self._swap_status)
+        else:
+            return self.swapper.ensure_warrior(on_status=self._swap_status)
 
     def _handle_warrior_dispatch(self, orchestrator_response: str):
         matches = TASK_WARRIOR_RE.findall(orchestrator_response)
@@ -122,6 +136,10 @@ class GarageApp:
 
             print(f"\n{MAGENTA}  [{i18n.t('warrior_dispatch')}]{RESET}")
             print(f"{MAGENTA}  -> {task.get('objective', '?')}{RESET}\n")
+
+            if not self._ensure_model("Warrior"):
+                print(f"{RED}  [ERROR] Failed to load Warrior model{RESET}")
+                return "[Warrior model failed to load]"
 
             self.harness_state = "working"
             warrior_msg = (
@@ -178,6 +196,10 @@ class GarageApp:
 
                 print(f"{YELLOW}  {user_input}{RESET}")
 
+                if not self._ensure_model(self.active_persona):
+                    print(f"{RED}  [ERROR] Failed to load {self.active_persona} model{RESET}")
+                    continue
+
                 persona = self.orchestrator if self.active_persona == "Orchestrator" else self.warrior
                 persona_color = CYAN if self.active_persona == "Orchestrator" else RED
                 self.harness_state = "thinking"
@@ -198,14 +220,17 @@ class GarageApp:
 
                 warrior_result = self._handle_warrior_dispatch(response)
                 if warrior_result:
-                    print(f"\n{CYAN}  [{i18n.t('warrior_result')}]{RESET}")
-                    synth_msg = f"Warrior completed the task. Results:\n{warrior_result}\n\nSynthesize for the user."
-                    self.harness_state = "thinking"
-                    synth = agent_loop(
-                        self.orchestrator, synth_msg, self.session_id,
-                        self.history, on_output=on_output, on_exec=on_exec
-                    )
-                    self.harness_state = "idle"
+                    if not self._ensure_model("Orchestrator"):
+                        print(f"{RED}  [ERROR] Failed to reload Orchestrator{RESET}")
+                    else:
+                        print(f"\n{CYAN}  [{i18n.t('warrior_result')}]{RESET}")
+                        synth_msg = f"Warrior completed the task. Results:\n{warrior_result}\n\nSynthesize for the user."
+                        self.harness_state = "thinking"
+                        synth = agent_loop(
+                            self.orchestrator, synth_msg, self.session_id,
+                            self.history, on_output=on_output, on_exec=on_exec
+                        )
+                        self.harness_state = "idle"
 
                 self.history.append({"role": "user", "content": user_input})
                 self.history.append({"role": "assistant", "content": response})

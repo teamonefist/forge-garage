@@ -11,80 +11,74 @@ fi
 
 mkdir -p "${RUN_DIR}" "${GARAGE_HOME}/logs"
 
-orch_port=$(python3 -c "import yaml; print(yaml.safe_load(open('${GARAGE_HOME}/config.yml'))['orchestrator']['port'])" 2>/dev/null || echo 8081)
-war_port=$(python3 -c "import yaml; print(yaml.safe_load(open('${GARAGE_HOME}/config.yml'))['warrior']['port'])" 2>/dev/null || echo 8082)
-orch_model=$(python3 -c "import yaml; print(yaml.safe_load(open('${GARAGE_HOME}/config.yml'))['orchestrator']['model_path'])" 2>/dev/null)
-war_model=$(python3 -c "import yaml; print(yaml.safe_load(open('${GARAGE_HOME}/config.yml'))['warrior']['model_path'])" 2>/dev/null)
+PERSONA="${1:-orchestrator}"
+PERSONA=$(echo "$PERSONA" | tr '[:upper:]' '[:lower:]')
 
-orch_model="${orch_model/#\~/$HOME}"
-war_model="${war_model/#\~/$HOME}"
-
-echo "=== Forge Garage Backend Start ==="
-echo ""
-
-# Start Orchestrator
-if curl -s "http://127.0.0.1:${orch_port}/health" >/dev/null 2>&1; then
-    echo "[Orchestrator] Already running on port ${orch_port}"
-else
-    echo "[Orchestrator] Starting on port ${orch_port}..."
-    echo "  Model: ${orch_model}"
-    ORCH_LORA=""
-    if [[ -f "${GARAGE_HOME}/models/forge-orchestrator-lora-f16.gguf" ]]; then
-        ORCH_LORA="--lora ${GARAGE_HOME}/models/forge-orchestrator-lora-f16.gguf"
-    fi
-    nohup llama-server \
-        --model "${orch_model}" \
-        ${ORCH_LORA} \
-        --port "${orch_port}" \
-        --host 127.0.0.1 \
-        --ctx-size 32768 \
-        --n-gpu-layers -1 \
-        --threads 8 \
-        --parallel 1 \
-        --cont-batching \
-        --flash-attn \
-        --mlock \
-        > "${GARAGE_HOME}/logs/orchestrator.log" 2>&1 &
-    echo $! > "${RUN_DIR}/orchestrator.pid"
-    echo "  PID: $(cat ${RUN_DIR}/orchestrator.pid)"
+if [[ "$PERSONA" != "orchestrator" && "$PERSONA" != "warrior" ]]; then
+    echo "Usage: forge-garage-start [orchestrator|warrior]"
+    echo "  Default: orchestrator"
+    exit 1
 fi
 
-# Start Warrior
-if curl -s "http://127.0.0.1:${war_port}/health" >/dev/null 2>&1; then
-    echo "[Warrior] Already running on port ${war_port}"
-else
-    echo "[Warrior] Starting on port ${war_port}..."
-    echo "  Model: ${war_model}"
-    WAR_LORA=""
-    if [[ -f "${GARAGE_HOME}/models/forge-warrior-lora-f16.gguf" ]]; then
-        WAR_LORA="--lora ${GARAGE_HOME}/models/forge-warrior-lora-f16.gguf"
+model_path=$(python3 -c "import yaml; print(yaml.safe_load(open('${GARAGE_HOME}/config.yml'))['${PERSONA}']['model_path'])" 2>/dev/null)
+port=$(python3 -c "import yaml; print(yaml.safe_load(open('${GARAGE_HOME}/config.yml'))['${PERSONA}']['port'])" 2>/dev/null || echo 8081)
+
+model_path="${model_path/#\~/$HOME}"
+
+echo "=== Forge Garage — Single GPU Mode ==="
+echo ""
+
+# Stop any running model first
+for p in orchestrator warrior; do
+    PID_FILE="${RUN_DIR}/${p}.pid"
+    if [[ -f "$PID_FILE" ]]; then
+        OLD_PID=$(cat "$PID_FILE")
+        if kill -0 "$OLD_PID" 2>/dev/null; then
+            echo "Stopping ${p} (PID ${OLD_PID})..."
+            kill "$OLD_PID" 2>/dev/null || true
+            sleep 2
+            kill -0 "$OLD_PID" 2>/dev/null && kill -9 "$OLD_PID" 2>/dev/null || true
+        fi
+        rm -f "$PID_FILE"
     fi
-    nohup llama-server \
-        --model "${war_model}" \
-        ${WAR_LORA} \
-        --port "${war_port}" \
-        --host 127.0.0.1 \
-        --ctx-size 32768 \
-        --n-gpu-layers -1 \
-        --threads 8 \
-        --parallel 1 \
-        --cont-batching \
-        --flash-attn \
-        --mlock \
-        > "${GARAGE_HOME}/logs/warrior.log" 2>&1 &
-    echo $! > "${RUN_DIR}/warrior.pid"
-    echo "  PID: $(cat ${RUN_DIR}/warrior.pid)"
+done
+
+if curl -s "http://127.0.0.1:${port}/health" >/dev/null 2>&1; then
+    echo "[${PERSONA}] Already running on port ${port}"
+    exit 0
 fi
 
-echo ""
-echo "Waiting for health checks..."
-sleep 5
+echo "[${PERSONA}] Starting on port ${port}..."
+echo "  Model: ${model_path}"
 
-for i in $(seq 1 60); do
-    orch_ok=$(curl -s -o /dev/null -w "%{http_code}" "http://127.0.0.1:${orch_port}/health" 2>/dev/null || echo "000")
-    war_ok=$(curl -s -o /dev/null -w "%{http_code}" "http://127.0.0.1:${war_port}/health" 2>/dev/null || echo "000")
-    if [[ "${orch_ok}" == "200" && "${war_ok}" == "200" ]]; then
-        echo "Both backends healthy."
+LORA_FILE="${GARAGE_HOME}/models/forge-${PERSONA}-lora-f16.gguf"
+LORA_ARG=""
+if [[ -f "$LORA_FILE" ]]; then
+    LORA_ARG="--lora ${LORA_FILE}"
+    echo "  LoRA: ${LORA_FILE}"
+fi
+
+nohup llama-server \
+    --model "${model_path}" \
+    ${LORA_ARG} \
+    --port "${port}" \
+    --host 127.0.0.1 \
+    --ctx-size 32768 \
+    --n-gpu-layers -1 \
+    --threads 8 \
+    --parallel 1 \
+    --cont-batching \
+    --flash-attn \
+    --mlock \
+    > "${GARAGE_HOME}/logs/${PERSONA}.log" 2>&1 &
+echo $! > "${RUN_DIR}/${PERSONA}.pid"
+echo "  PID: $(cat ${RUN_DIR}/${PERSONA}.pid)"
+
+echo ""
+echo "Waiting for health check..."
+for i in $(seq 1 120); do
+    if curl -s "http://127.0.0.1:${port}/health" >/dev/null 2>&1; then
+        echo "${PERSONA} is ready."
         exit 0
     fi
     printf "."
@@ -92,7 +86,5 @@ for i in $(seq 1 60); do
 done
 
 echo ""
-echo "Warning: Not all backends healthy after 120s."
-echo "  Orchestrator: $(curl -s -o /dev/null -w '%{http_code}' http://127.0.0.1:${orch_port}/health 2>/dev/null || echo 'unreachable')"
-echo "  Warrior: $(curl -s -o /dev/null -w '%{http_code}' http://127.0.0.1:${war_port}/health 2>/dev/null || echo 'unreachable')"
-echo "Check logs: ${GARAGE_HOME}/logs/"
+echo "Warning: ${PERSONA} not healthy after 240s."
+echo "Check logs: ${GARAGE_HOME}/logs/${PERSONA}.log"
