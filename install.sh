@@ -415,7 +415,7 @@ explain_en "Verifying that Python modules load without errors."
 echo ""
 
 source "${GARAGE_HOME}/venv/bin/activate"
-PYTHONPATH="${GARAGE_HOME}/lib" python3 -c "
+PYTHONPATH="${GARAGE_HOME}" python3 -c "
 from lib import i18n, db, garage_core
 from lib.orchestrator_harness import build_orchestrator
 from lib.warrior_harness import build_warrior
