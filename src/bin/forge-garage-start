@@ -68,7 +68,7 @@ nohup llama-server \
     --threads 8 \
     --parallel 1 \
     --cont-batching \
-    --flash-attn \
+    --flash-attn on \
     --mlock \
     > "${GARAGE_HOME}/logs/${PERSONA}.log" 2>&1 &
 echo $! > "${RUN_DIR}/${PERSONA}.pid"

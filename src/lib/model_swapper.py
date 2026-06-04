@@ -80,7 +80,7 @@ def start_model(persona: str, model_path: str, port: int,
         "--threads", "8",
         "--parallel", "1",
         "--cont-batching",
-        "--flash-attn",
+        "--flash-attn", "on",
         "--mlock",
     ]
     if lora_path and Path(lora_path).exists():
