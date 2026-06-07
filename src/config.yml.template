@@ -29,7 +29,7 @@ warrior_tools:
   langs: [python3, python, go, gcc, cargo, rustc, git, node, npm]
   dns: [dig, host, whois, dnsrecon, dnsenum, nslookup, massdns]
   portscan: [nmap, rustscan, naabu, masscan]
-  subdomain: [subfinder, amass, findomain, assetfinder, katana, hakrawler, multiping]
+  subdomain: [subfinder, amass, findomain, assetfinder, katana, hakrawler, multiping, bbot]
   webrecon: [whatweb, wafw00f, httpx, nuclei, nikto]
   webfuzz: [feroxbuster, gobuster, ffuf, wfuzz, arjun, dirsearch]
   http: [curl, wget]
