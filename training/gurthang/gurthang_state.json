@@ -1,0 +1,33 @@
+{
+  "dataset_id": "accounts/kristophkortryk/datasets/gurthang-1781186055",
+  "phases": {
+    "1": {
+      "job_id": "accounts/kristophkortryk/supervisedFineTuningJobs/tkjezbbs",
+      "model_id": "gurthang-p1-explore",
+      "base_model": "accounts/fireworks/models/llama-v3p3-70b-instruct",
+      "status": "COMPLETED",
+      "launched_at": "2026-06-11T13:59:02Z",
+      "config": {
+        "epochs": 1,
+        "batch_size": 8,
+        "lr": 2e-05,
+        "suffix": "gurthang-p1-explore"
+      },
+      "output_model": "accounts/kristophkortryk/models/ft-tkjezbbs-dsvmz",
+      "cost": "$15.47"
+    },
+    "2": {
+      "job_id": "accounts/kristophkortryk/supervisedFineTuningJobs/bamwadfs",
+      "model_id": "gurthang-p2-refine",
+      "base_model": "accounts/kristophkortryk/models/ft-tkjezbbs-dsvmz",
+      "status": "RUNNING",
+      "launched_at": "2026-06-11T16:37:13Z",
+      "config": {
+        "epochs": 1,
+        "batch_size": 16,
+        "lr": 1.4e-05,
+        "suffix": "gurthang-p2-refine"
+      }
+    }
+  }
+}
